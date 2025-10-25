@@ -14,6 +14,8 @@ class TrackerNode(Node):
 
         self.subscription = self.create_subscription(
             PointStamped, '/people_positions', self.detection_callback, 10)
+        
+        
         self.publisher_ = self.create_publisher(MarkerArray, '/person_markers', 10)
 
         self.people = {}  # {id: {"history": [Point], "color": (r,g,b)}}
@@ -59,7 +61,7 @@ class TrackerNode(Node):
 
         for pid, data in self.people.items():
             marker = Marker()
-            marker.header.frame_id = "base_link"
+            marker.header.frame_id = "laser"
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = "people"
             marker.id = pid

@@ -1,109 +1,151 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import LaserScan, PointCloud
-from geometry_msgs.msg import Point32, PointStamped
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import PointStamped, Point
 from std_msgs.msg import Header
 import numpy as np
-from math import sin, cos
+from builtin_interfaces.msg import Time
+
 
 
 class ScanProcessorNode(Node):
     def __init__(self):
         super().__init__('scan_processor')
 
-        # Subscribers and Publishers
+        # Subscribe to LIDAR scans
         self.subscription = self.create_subscription(
-            LaserScan, '/scan', self.scan_callback, 10)
+            LaserScan, '/scan', self.scan_callback, 10
+        )
 
-        self.cloud_pub = self.create_publisher(PointCloud, '/scan_cloud', 10)
-        self.people_pub = self.create_publisher(PointStamped, '/people_positions', 10)
+        # Publisher for detected "people positions"
+        self.publisher_ = self.create_publisher(PointStamped, '/people_positions', 10)
 
-        self.get_logger().info("✅ Scan Processor Node started. Subscribed to /scan")
-    
-        self.count = 0
-    # ----------------------------------------------------------------------
-    # ✅ Converts LaserScan → PointCloud
-    # ----------------------------------------------------------------------
-    # def laser_scan_to_point_cloud(self, scan: LaserScan) -> PointCloud:
-    #     """
-    #     Converts a LaserScan message to a PointCloud message.
-    #     Properly references scan.header, scan.angle_min, etc.
-    #     """
-    #     cloud = PointCloud()
-    #     cloud.header = Header()
-    #     cloud.header.stamp = scan.header.stamp
-    #     # Make sure to use the LIDAR's frame or remap if needed
-    #     cloud.header.frame_id = scan.header.frame_id or "laser"
+        # Persistent environment model (initialized lazily)
+        self.environment = None
 
-    #     points = []
-    #     for i in range(len(scan.ranges)):
-    #         r = scan.ranges[i]
-    #         # skip invalid or out-of-range readings
-    #         if np.isfinite(r) and scan.range_min < r < scan.range_max:
-    #             angle = scan.angle_min + i * scan.angle_increment
-    #             x = r * cos(angle)
-    #             y = r * sin(angle)
-    #             points.append(Point32(x=x, y=y, z=0.0))
+        self.detection_log = []  # stores tuples of (timestamp, len(clusters))
+        self.last_detected_count = None
 
-    #     cloud.points = points
-    #     return cloud
-    
-    def laser_scan_to_point_cloud(self, scan: LaserScan):
-        # self.count += 1
-        # self.get_logger().info(f"Converting scan #{self.count} to PointCloud with {len(scan.ranges)} points")
-        return PointCloud(header=scan.header, points=[
-            Point32(x=scan.ranges[i] * cos(scan.angle_min + i * scan.angle_increment),
-                     y=scan.ranges[i] * sin(scan.angle_min + i * scan.angle_increment),
-                     z=0.0)
-            for i in range(len(scan.ranges))
-        ])
+        # Parameters for detection
+        self.thresholds = [0.3, 0.8]         # meters difference
+        self.cluster_sizes = [5]   # consecutive beams to form valid cluster
+        self.param_index = 0
+        self.decay = 0.999  # slow environment update decay
 
-    # ----------------------------------------------------------------------
-    # ✅ Callback for /scan messages
-    # ----------------------------------------------------------------------
+        self.get_logger().info("✅ Scan Processor Node started (LIDAR change detection mode)")
+
     def scan_callback(self, msg: LaserScan):
-        # Convert to PointCloud and publish
-        cloud = self.laser_scan_to_point_cloud(msg)
-        self.cloud_pub.publish(cloud)
 
-        # If empty, skip
-        if len(cloud.points) == 0:
-            self.get_logger().warn("⚠️ No valid scan points found.")
+        # --- Extract ranges and angles ---
+        ranges = np.array(msg.ranges)
+        num_points = len(ranges)
+        angles = msg.angle_min + np.arange(num_points) * msg.angle_increment
+
+        # Lazy initialization of environment model
+        if self.environment is None:
+            self.environment = ranges.copy()
+            self.get_logger().info(f"Initialized environment model with {num_points} beams.")
             return
 
-        # Convert to numpy arrays
-        xs = np.array([p.x for p in cloud.points])
-        ys = np.array([p.y for p in cloud.points])
+        # --- Update environment model (keep max seen distances) ---
+        self.environment = np.maximum(self.environment, ranges)
 
-        # (For now, randomly select mock “people”)
-        num_people = np.random.randint(1, 3)
-        indices = np.random.choice(len(xs), num_people, replace=False)
+        self.param_index = (self.param_index + 1) % (len(self.thresholds) * len(self.cluster_sizes))
+        t_idx = self.param_index // len(self.cluster_sizes)
+        c_idx = self.param_index % len(self.cluster_sizes)
 
-        for idx in indices:
-            pt = PointStamped()
-            pt.header.stamp = self.get_clock().now().to_msg()
-            pt.header.frame_id = msg.header.frame_id or "base_link"
-            pt.point.x = float(xs[idx])
-            pt.point.y = float(ys[idx])
-            pt.point.z = 0.0
-            self.people_pub.publish(pt)
+        self.threshold = self.thresholds[t_idx]
+        self.cluster_size = self.cluster_sizes[c_idx]
 
-        self.get_logger().debug(f"Published {num_people} mock people positions")
+        # self.get_logger().info(f"Using threshold={self.threshold:.2f}, cluster_size={self.cluster_size}")
 
 
-# ----------------------------------------------------------------------
-# ✅ Standard ROS2 boilerplate
-# ----------------------------------------------------------------------
+        # --- Compute difference from environment model ---
+        delta = self.environment - ranges
+        poi_mask = (delta > self.threshold) & np.isfinite(ranges)
+        # self.get_logger().info(f"Detected {np.sum(poi_mask)} points of interest")
+        
+        self.get_logger().info(f"\n{poi_mask.astype(int)}")
+
+        # --- Cluster consecutive detections ---
+        clusters = []
+        current_cluster = []
+        self.min_cluster_size = self.cluster_size
+
+        for i, is_poi in enumerate(poi_mask):
+            if is_poi:
+                current_cluster.append(i)
+            elif current_cluster:
+                # Only add clusters that meet size threshold
+                if len(current_cluster) >= self.min_cluster_size:
+                    clusters.append(current_cluster)
+                current_cluster = []
+
+        if self.last_detected_count != len(clusters):
+            # Capture current ROS time in seconds (float)
+            now = self.get_clock().now().seconds_nanoseconds()
+            current_time = now[0] + now[1] * 1e-9
+
+            # Initialize reference (start) time if this is the first entry
+            if not hasattr(self, "start_time"):
+                self.start_time = current_time
+
+            # Compute time relative to start
+            relative_time = current_time - self.start_time
+
+            # Record time (1 decimal precision) and number of detected clusters
+            self.detection_log.append((round(relative_time, 1), len(clusters), self.threshold, self.cluster_size))
+            self.last_detected_count = len(clusters)
+
+            # Print in compact format
+            print("Detection changes:")
+            for idx, entry in enumerate(self.detection_log):
+                print(f"{idx}: {entry}")
+            print()
+
+        # Don’t forget to check the last one at the end
+        if len(current_cluster) >= self.min_cluster_size:
+            clusters.append(current_cluster)
+
+        # print("\n")
+        # print(f"\rPerson(s) detected: {len(clusters)}\n\n")    
+
+        # if len(clusters) > 0:
+        #     # print("\n")
+        #     # print(f"\rPerson(s) detected: {len(clusters)}\n\n")           
+        #     self.get_logger().info(f"\nThreshold: {self.threshold} \n Cluster size: {self.cluster_size} \n POI: {len(poi_mask)} \n Detected {len(clusters)} clusters of interest\n\n")
+
+        # --- Convert clusters to Cartesian & publish ---
+        for cluster in current_cluster:
+            cluster_ranges = ranges[cluster]
+            cluster_angles = angles[cluster]
+            # compute centroid of cluster
+            x = np.mean(cluster_ranges * np.cos(cluster_angles))
+            y = np.mean(cluster_ranges * np.sin(cluster_angles))
+
+            point_msg = PointStamped()
+            point_msg.header = Header()
+            point_msg.header.stamp = self.get_clock().now().to_msg()
+            point_msg.header.frame_id = msg.header.frame_id
+
+            point_msg.point = Point(x=float(x), y=float(y), z=0.0)
+
+            self.publisher_.publish(point_msg)
+
+        if len(current_cluster) > 0:
+            self.get_logger().debug(f"Published {len(current_cluster)} person positions.")
+
 def main(args=None):
     rclpy.init(args=args)
     node = ScanProcessorNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Shutting down Scan Processor.")
-    node.destroy_node()
-    rclpy.shutdown()
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

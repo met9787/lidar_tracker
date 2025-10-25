@@ -1,7 +1,8 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler, EmitEvent, Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch.event_handlers import OnProcessExit
 
 def generate_launch_description():
     # Arguments
@@ -46,6 +47,15 @@ def generate_launch_description():
         output='screen'
     )
 
+    terminate_at_end = RegisterEventHandler(
+    OnProcessExit(
+        target_action=play_bag,
+        on_exit=[
+            EmitEvent(event=Shutdown())
+        ]
+    )
+    )
+
     # Launch description
     return LaunchDescription([
         bag_in_arg,
@@ -54,4 +64,5 @@ def generate_launch_description():
         record_bag,
         scan_processor,
         tracker,
+        terminate_at_end
     ])
