@@ -22,7 +22,9 @@ class TrackerNode(Node):
         self.next_id = 0
         self.distance_threshold = 0.8  # meters for matching detections
 
-        self.timer = self.create_timer(0.5, self.publish_markers)
+        # self.timer = self.create_timer(0.5, self.publish_markers)
+        self.timer = self.create_timer(0.5, self.publish_all_markers)
+
         self.get_logger().info("Tracker Node started. Publishing /person_markers")
 
     def detection_callback(self, msg: PointStamped):
@@ -82,6 +84,51 @@ class TrackerNode(Node):
 
         self.publisher_.publish(marker_array)
         self.get_logger().debug(f"Published {len(marker_array.markers)} markers")
+
+def publish_paths(self):
+    """
+    Publish each tracked person's path as a colored line in RViz.
+    """
+    marker_array = MarkerArray()
+
+    for pid, data in self.people.items():
+        # Create a line marker representing the path
+        marker = Marker()
+        marker.header.frame_id = "laser"  # must match coordinate frame of detections
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "person_paths"
+        marker.id = pid
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+
+        # Line width
+        marker.scale.x = 0.05
+
+        # Color (from self.people[pid]["color"])
+        r, g, b = data["color"]
+        marker.color.r = float(r)
+        marker.color.g = float(g)
+        marker.color.b = float(b)
+        marker.color.a = 1.0
+
+        # Persistent (0 = infinite)
+        marker.lifetime = Duration(sec=0)
+
+        # Add all history points for this person
+        for p in data["history"]:
+            marker.points.append(Point(x=p.x, y=p.y, z=0.0))
+
+        marker_array.markers.append(marker)
+
+    # Publish all the markers
+    self.publisher_.publish(marker_array)
+
+    self.get_logger().debug(f"Published {len(marker_array.markers)} path markers.")
+
+
+def publish_all_markers(self):
+    self.publish_markers()  # your existing function for person markers
+    self.publish_paths()    # new function for history lines
 
 
 def main(args=None):
