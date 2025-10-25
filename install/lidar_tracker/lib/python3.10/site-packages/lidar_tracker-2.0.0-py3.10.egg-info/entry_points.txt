@@ -1,4 +1,0 @@
-[console_scripts]
-scan_processor = lidar_tracker.scan_processor:main
-tracker_node = lidar_tracker.tracker_node:main
-
