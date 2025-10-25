@@ -10,7 +10,7 @@ import random
 
 class TrackerNode(Node):
     def __init__(self):
-        super().__init__('tracker')
+        super().__init__('tracker_node')
 
         self.subscription = self.create_subscription(
             PointStamped, '/people_positions', self.detection_callback, 10)
@@ -29,6 +29,8 @@ class TrackerNode(Node):
 
     def detection_callback(self, msg: PointStamped):
         detected_point = msg.point
+
+        self.get_logger().info(f"Received detection at ({detected_point.x:.2f}, {detected_point.y:.2f})")
 
         # Find if this point belongs to an existing tracked person
         matched_id = None
