@@ -19,7 +19,7 @@ class ScanProcessorNode(Node):
         )
 
         # Publisher for detected "people positions"
-        self.publisher_ = self.create_publisher(PointStamped, '/people_positions', 10)
+        self.people_publisher = self.create_publisher(PointStamped, '/people_positions', 10)
 
         # Persistent environment model (initialized lazily)
         self.environment = None
@@ -28,8 +28,8 @@ class ScanProcessorNode(Node):
         self.last_detected_count = None
 
         # Parameters for detection
-        self.thresholds = [0.3, 0.8]         # meters difference
-        self.cluster_sizes = [5]   # consecutive beams to form valid cluster
+        self.thresholds = [0.3]         # meters difference
+        self.cluster_sizes = [9]         # consecutive beams to form valid cluster
         self.param_index = 0
         self.decay = 0.999  # slow environment update decay
 
@@ -117,21 +117,22 @@ class ScanProcessorNode(Node):
         #     self.get_logger().info(f"\nThreshold: {self.threshold} \n Cluster size: {self.cluster_size} \n POI: {len(poi_mask)} \n Detected {len(clusters)} clusters of interest\n\n")
 
         # --- Convert clusters to Cartesian & publish ---
-        for cluster in current_cluster:
+        for cluster in clusters:
             cluster_ranges = ranges[cluster]
             cluster_angles = angles[cluster]
-            # compute centroid of cluster
+
+            # Compute cluster centroid in Cartesian
             x = np.mean(cluster_ranges * np.cos(cluster_angles))
             y = np.mean(cluster_ranges * np.sin(cluster_angles))
 
+            # Publish
             point_msg = PointStamped()
             point_msg.header = Header()
             point_msg.header.stamp = self.get_clock().now().to_msg()
             point_msg.header.frame_id = msg.header.frame_id
 
             point_msg.point = Point(x=float(x), y=float(y), z=0.0)
-
-            self.publisher_.publish(point_msg)
+            self.people_publisher.publish(point_msg)
 
         if len(current_cluster) > 0:
             self.get_logger().debug(f"Published {len(current_cluster)} person positions.")
