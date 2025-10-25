@@ -1,0 +1,42 @@
+running egg_info
+creating build/lidar_tracker/lidar_tracker.egg-info
+writing build/lidar_tracker/lidar_tracker.egg-info/PKG-INFO
+writing dependency_links to build/lidar_tracker/lidar_tracker.egg-info/dependency_links.txt
+writing entry points to build/lidar_tracker/lidar_tracker.egg-info/entry_points.txt
+writing requirements to build/lidar_tracker/lidar_tracker.egg-info/requires.txt
+writing top-level names to build/lidar_tracker/lidar_tracker.egg-info/top_level.txt
+writing manifest file 'build/lidar_tracker/lidar_tracker.egg-info/SOURCES.txt'
+reading manifest file 'build/lidar_tracker/lidar_tracker.egg-info/SOURCES.txt'
+writing manifest file 'build/lidar_tracker/lidar_tracker.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build
+creating /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib
+creating /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker
+copying lidar_tracker/scan_processor.py -> /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker
+copying lidar_tracker/tracker_node.py -> /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker
+copying lidar_tracker/__init__.py -> /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker
+running install
+running install_lib
+creating /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker
+copying /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker/scan_processor.py -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker
+copying /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker/tracker_node.py -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker
+copying /home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/build/lib/lidar_tracker/__init__.py -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker
+byte-compiling /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker/scan_processor.py to scan_processor.cpython-310.pyc
+byte-compiling /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker/tracker_node.py to tracker_node.cpython-310.pyc
+byte-compiling /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker/__init__.py to __init__.cpython-310.pyc
+running install_data
+creating /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/ament_index
+creating /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/ament_index/resource_index
+creating /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/ament_index/resource_index/packages
+copying resource/lidar_tracker -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/ament_index/resource_index/packages
+copying package.xml -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/lidar_tracker
+creating /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/lidar_tracker/launch
+copying launch/test.py -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/lidar_tracker/launch
+copying launch/lidar_tracker_launch.py -> /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/share/lidar_tracker/launch
+running install_egg_info
+Copying build/lidar_tracker/lidar_tracker.egg-info to /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/python3.10/site-packages/lidar_tracker-2.0.0-py3.10.egg-info
+running install_scripts
+Installing scan_processor script to /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/lidar_tracker
+Installing tracker_node script to /home/metor/ros2_ws/src/lidar_tracker/install/lidar_tracker/lib/lidar_tracker
+writing list of installed files to '/home/metor/ros2_ws/src/lidar_tracker/build/lidar_tracker/install.log'
