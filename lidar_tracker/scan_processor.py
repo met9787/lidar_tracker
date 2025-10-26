@@ -28,8 +28,8 @@ class ScanProcessorNode(Node):
         self.last_detected_count = None
 
         # Parameters for detection
-        self.thresholds = [0.3]         # meters difference
-        self.cluster_sizes = [9]         # consecutive beams to form valid cluster
+        self.thresholds = [0.2]         # meters difference
+        self.cluster_sizes = [10]         # consecutive beams to form valid cluster
         self.param_index = 0
         self.decay = 0.999  # slow environment update decay
 
@@ -45,11 +45,10 @@ class ScanProcessorNode(Node):
         # Lazy initialization of environment model
         if self.environment is None:
             self.environment = ranges.copy()
-            self.get_logger().info(f"Initialized environment model with {num_points} beams.")
-            return
 
         # --- Update environment model (keep max seen distances) ---
-        self.environment = np.maximum(self.environment, ranges)
+        self.environment = self.decay * self.environment + (1 - self.decay) * ranges
+        self.environment = np.maximum(self.environment, ranges* 0.95)
 
         self.param_index = (self.param_index + 1) % (len(self.thresholds) * len(self.cluster_sizes))
         t_idx = self.param_index // len(self.cluster_sizes)
@@ -63,15 +62,25 @@ class ScanProcessorNode(Node):
 
         # --- Compute difference from environment model ---
         delta = self.environment - ranges
-        poi_mask = (delta > self.threshold) & np.isfinite(ranges)
+
+        # Case 1: Normal closer-than-background detection
+        poi_mask = (delta > self.threshold)
+
+        # Case 2: Beam was previously invalid (inf/nan), now valid
+        appeared_mask = np.isfinite(ranges) & ~np.isfinite(self.environment)
+
+        # Combine both
+        poi_mask = poi_mask | appeared_mask
         # self.get_logger().info(f"Detected {np.sum(poi_mask)} points of interest")
         
-        self.get_logger().info(f"\n{poi_mask.astype(int)}")
+        # self.get_logger().info(f"\n{poi_mask.astype(int)}")
 
         # --- Cluster consecutive detections ---
         clusters = []
         current_cluster = []
         self.min_cluster_size = self.cluster_size
+        # angular_width = np.deg2rad(2)  # 2° wide minimum cluster
+        # self.min_cluster_size = max(2, int(angular_width / msg.angle_increment))
 
         for i, is_poi in enumerate(poi_mask):
             if is_poi:
@@ -98,15 +107,17 @@ class ScanProcessorNode(Node):
             self.detection_log.append((round(relative_time, 1), len(clusters), self.threshold, self.cluster_size))
             self.last_detected_count = len(clusters)
 
+                # Don’t forget to check the last one at the end
+        if len(current_cluster) >= self.min_cluster_size:
+            clusters.append(current_cluster)
+
             # Print in compact format
             print("Detection changes:")
             for idx, entry in enumerate(self.detection_log):
                 print(f"{idx}: {entry}")
             print()
 
-        # Don’t forget to check the last one at the end
-        if len(current_cluster) >= self.min_cluster_size:
-            clusters.append(current_cluster)
+
 
         # print("\n")
         # print(f"\rPerson(s) detected: {len(clusters)}\n\n")    
@@ -134,8 +145,8 @@ class ScanProcessorNode(Node):
             point_msg.point = Point(x=float(x), y=float(y), z=0.0)
             self.people_publisher.publish(point_msg)
 
-        if len(current_cluster) > 0:
-            self.get_logger().debug(f"Published {len(current_cluster)} person positions.")
+        if clusters:
+            self.get_logger().info(f"Published {len(clusters)} person positions.")
 
 def main(args=None):
     rclpy.init(args=args)
