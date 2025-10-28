@@ -28,9 +28,11 @@ class ScanProcessorNode(Node):
         self.last_detected_count = None
 
         # Parameters for detection
-        self.thresholds = [0.2]         # meters difference
+        self.thresholds = [0.4]         # meters difference
         self.cluster_sizes = [10]         # consecutive beams to form valid cluster
         self.param_index = 0
+        self.ignore_false = 3  # <-- number of consecutive 0's (False) to ignore and still merge clusters
+
         self.decay = 0.999  # slow environment update decay
 
         self.get_logger().info("✅ Scan Processor Node started (LIDAR change detection mode)")
@@ -73,23 +75,32 @@ class ScanProcessorNode(Node):
         poi_mask = poi_mask | appeared_mask
         # self.get_logger().info(f"Detected {np.sum(poi_mask)} points of interest")
         
-        # self.get_logger().info(f"\n{poi_mask.astype(int)}")
+        self.get_logger().info(f"\n{poi_mask.astype(int)}")
 
         # --- Cluster consecutive detections ---
         clusters = []
         current_cluster = []
+        gap_counter = 0
         self.min_cluster_size = self.cluster_size
-        # angular_width = np.deg2rad(2)  # 2° wide minimum cluster
-        # self.min_cluster_size = max(2, int(angular_width / msg.angle_increment))
 
         for i, is_poi in enumerate(poi_mask):
             if is_poi:
+                # If current point is True, just add it
                 current_cluster.append(i)
-            elif current_cluster:
-                # Only add clusters that meet size threshold
-                if len(current_cluster) >= self.min_cluster_size:
-                    clusters.append(current_cluster)
-                current_cluster = []
+                gap_counter = 0  # reset the gap counter
+            else:
+                # Count gaps (zeros)
+                if current_cluster:
+                    gap_counter += 1
+                    if gap_counter <= self.ignore_false:
+                        # Still within tolerance, pretend the zeros don't break the cluster
+                        continue
+                    else:
+                        # Too many zeros — end of cluster
+                        if len(current_cluster) >= self.min_cluster_size:
+                            clusters.append(current_cluster)
+                        current_cluster = []
+                        gap_counter = 0  # reset
 
         if self.last_detected_count != len(clusters):
             # Capture current ROS time in seconds (float)
@@ -132,21 +143,36 @@ class ScanProcessorNode(Node):
             cluster_ranges = ranges[cluster]
             cluster_angles = angles[cluster]
 
-            # Compute cluster centroid in Cartesian
-            x = np.mean(cluster_ranges * np.cos(cluster_angles))
-            y = np.mean(cluster_ranges * np.sin(cluster_angles))
+            # Compute Cartesian points for the entire cluster
+            xs = cluster_ranges * np.cos(cluster_angles)
+            ys = cluster_ranges * np.sin(cluster_angles)
+
+            # If we have a previous point, pick the closest beam to it
+            if hasattr(self, "last_point"):
+                distances = np.sqrt((xs - self.last_point.x)**2 + (ys - self.last_point.y)**2)
+                closest_idx = np.argmin(distances)
+                x = xs[closest_idx]
+                y = ys[closest_idx]
+            else:
+                # Default to cluster centroid for the very first detection
+                x = np.mean(xs)
+                y = np.mean(ys)
 
             # Publish
             point_msg = PointStamped()
             point_msg.header = Header()
             point_msg.header.stamp = self.get_clock().now().to_msg()
             point_msg.header.frame_id = msg.header.frame_id
-
             point_msg.point = Point(x=float(x), y=float(y), z=0.0)
+
             self.people_publisher.publish(point_msg)
+
+            # Save this as the last published point for continuity
+            self.last_point = point_msg.point
 
         if clusters:
             self.get_logger().info(f"Published {len(clusters)} person positions.")
+
 
 def main(args=None):
     rclpy.init(args=args)
